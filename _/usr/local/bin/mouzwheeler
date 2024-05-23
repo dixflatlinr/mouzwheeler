@@ -1,0 +1,85 @@
+#!/usr/bin/env python3
+
+import evdev
+import signal, sys, os
+
+from evdev import InputDevice, UInput, ecodes
+
+import argparse
+
+
+class MouzWheeler:
+    """
+    Repeat mouse wheel events to speed up scrolling... if nothing else works
+    """
+    repeat = 3
+
+    mouse:InputDevice = None
+    ui:evdev.uinput.UInput = None
+
+    def __init__(self):
+        if os.geteuid() != 0:
+            print("Mouz needs root to access /dev/uinput!")
+            exit(1)
+
+        parser = argparse.ArgumentParser(description='')
+        parser.add_argument('-repeat', type=int, default=3, help='this many times')
+        args = parser.parse_args()
+
+        self.repeat = args.repeat
+
+        signal.signal(signal.SIGTERM, self.signal_handler)
+
+        device = self.find_mouse_with_wheel()
+        self.run(device[0]['path'])
+
+        pass
+
+    def run(self, device_path:str):
+        # Setup input device and virtual output device
+        self.mouse = InputDevice(device_path)
+
+        #uiuiui! 🐖
+        self.ui = UInput.from_device(self.mouse, name='mouzer')
+
+        try:
+            for event in self.mouse.read_loop():
+                if event.type == ecodes.EV_REL and event.code in [ecodes.REL_WHEEL]:
+                    self.repeat_event(event) # original event
+
+                    # extra events
+                    for _ in range(self.repeat):
+                        self.repeat_event(event)
+        except KeyboardInterrupt:
+            print("Exiting...")
+        finally:
+            self.cleanup()
+
+    def find_mouse_with_wheel(self)->list:
+        """
+            Find first mouse that has a wheel
+        """
+        devices = [InputDevice(path) for path in evdev.list_devices()]
+        mice_with_wheel = []
+
+        for device in devices:
+            caps = device.capabilities()
+            #                if "mouse" in device.name.lower():
+            if ecodes.EV_REL in caps and ecodes.REL_WHEEL in caps[ecodes.EV_REL]:
+                mice_with_wheel.append({'name': device.name, 'path':device.path})
+
+        return mice_with_wheel
+
+    def cleanup(self):
+        self.ui.close()
+        self.mouse.close()
+
+    def repeat_event(self, event):
+        self.ui.write_event(event)
+        self.ui.syn()
+
+    def signal_handler(self, sig, frame):
+        signal_name = signal.Signals(sig).name
+        sys.exit(0)
+
+MouzWheeler()

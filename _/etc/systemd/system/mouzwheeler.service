@@ -1,0 +1,12 @@
+[Unit]
+Description=Mouse wheel event repeater
+Documentation=https://github.com/dixflatlinr/mouzwheeler
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/default/mouzwheeler
+ExecStart=/usr/local/bin/mouzwheeler -repeat=${REPEAT}
+ExecReload=/bin/kill -HUP $MAINPID
+
+[Install]
+WantedBy=multi-user.target
